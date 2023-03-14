@@ -1,0 +1,490 @@
+; Rpn86 ParserTable
+ParseTable:
+	.db $FF,$00,$00,$00,$00,$FF,$01,$FF,$00,$00,$00,$FF,$02,$03,$04,$05	;00
+	.db $13,$14,$15,$FF,$FF,$FF,$33,$35,$34,$FF,$00,$00,$00,$00,$00,$00	;10
+	.db $00,$00,$00,$00,$00,$00,$00,$FF,$33,$33,$33,$33,$33,$33,$33,$33	;20
+	.db $33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33	;30
+	.db $33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33	;40
+	.db $33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$33,$00,$12	;50
+	.db $06,$07,$08,$09,$0A,$0B,$10,$11,$0E,$0F,$0C,$0D,$FF,$FF,$FF,$FF	;60
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;70
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;80
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;90
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;A0
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;B0
+	.db $FF,$FF,$16,$16,$16,$16,$16,$16,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;C0
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;D0
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;E0
+	.db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF	;F0
+
+MenuTable:
+	;	Each Entry are 2 Byte Long.. The first is the Menu adress and the next is the adress of the 
+	;		Menu code table or $FFFF.. this mean Do nothing or $FFFE if all code in this menu 
+	;			Go to temp Alg Mode
+
+	.dw	$4fd2
+		.dw	MathNumTable
+		
+	.dw	$4fE6
+		.dw	MathProbTable	
+		
+	.dw	$4FF6
+		.dw	MathAngleTable	
+		
+	.dw	$5000
+		.dw	MathHypTable
+	
+	.dw	$500E
+		.dw	MathMiscTable
+		
+	.dw	$5042
+		.dw	BaseAtoF	
+		
+	.dw	$5064
+		.dw	BaseType	
+
+	.dw	$5078
+		.dw	BaseBool
+		
+	.dw	$5082
+		.dw	BaseBit	
+		
+	.dw	$FFFF
+
+MathNumTable:
+
+
+; -------------------------- Page 1
+	.db	$1B			; round(
+	.db	$19			; iPart
+	.db	$1A			; fPart
+	.db	$17			; int
+	.db	$18			; abs
+
+; --------------------------- Page 2
+
+	.db	$24			; sign(
+	.db	$1D			; min(
+	.db	$1C			; max(
+	.db	$1E			; mod(
+
+MathProbTable:
+	; pg 1
+	.db	$25			; !
+	.db	$1F			; nPr
+	.db	$20			; nCr
+	.db	$26			; rand
+	.db	$21			; randint
+	
+	; pg 2
+	
+	.db	$22			; RandNorm
+	.db	$23			; RandBin
+
+MathAngleTable:
+	; pg 1
+	.db	$27			; Degree
+	.db	$28			; Radian
+	.db	$33			; Exit In TempAlgMode
+	.db	$33			; Exit In TempAlgMode
+
+MathHypTable:
+	; pg 1
+	.db	$29			; sinH
+	.db	$2A			; cosH
+	.db	$2B			; tanH
+	.db	$2C			; SinH^-1
+	.db	$2D			; CosH^-1
+	
+	; pg 2
+	
+	.db	$2E			; TanH^-1
+
+MathMiscTable:
+	; pg 1
+	.db	$33			; Exit In TempAlgMode ==> Sum [ NO REAL USAGE *LIST ONLY*]
+	.db	$33			; Exit In TempAlgMode ==> Prog [ NO REAL USAGE *LIST ONLY*]
+	.db	$33			; Exit In TempAlgMode ==> Seq [ NO RPN USAGE ]
+	.db	$2F			; lcm
+	.db	$30			; Gcd
+	
+	; pg 2
+	.db	$33			; Exit In TempAlgMode ==> >Frac [ TO IMPLANT ]
+	.db	$31			; %
+	.db	$33			; Exit In TempAlgMode ==> pEval [ NO RPN USAGE ]
+	.db	$32			; XSqrt(Y)
+	.db	$33			; Exit In TempAlgMode ==> Eval [ NO RPN USAGE ]
+	
+	; pg 3
+	
+	
+BaseAtoF:
+	; pg 1
+	.db	$00		; Bh
+	.db	$00		; Ch
+	.db	$00		; Dh
+	.db	$00		; Eh
+	.db	$00		; Fh
+
+	; M1 for A
+	.db	$00		; Ah
+
+BaseType:
+	.db	$00		; b
+	.db	$00		; h
+	.db	$00		; o
+	.db	$00		; d
+
+BaseBool:
+	.db	$36		; And
+	.db	$37		; Or
+	.db	$38		; Xor
+	.db	$39		; Not
+
+BaseBit:
+	.db	$3A
+	.db	$3B
+	.db	$3C
+	.db	$3D
+ActionTable:
+	; Each entry is 4 Byte Long
+	; 	1st == Status
+	;		$FF	==	Jump to a adress, The adresse is stored at byte 3 & 4
+	;		$00	==	No Argument Romcall.. Byte 2 is the waiting byte and 3 & 4 the romcall adress.
+	;		$01	==	Like $00 but with 1 argument (x)
+	;		$02	==	Like $01 But with 2 argument (x && y)
+	;		$03	==	Like $04 but with 1 argument
+	;		$04	==	This is Like 2 Argument but it pass with _BinOpExec so the byte 2 is the Wait
+	;								Byte and the byte 3 is the code of BinOpExec(a register)
+	
+
+
+
+	; [01]	EnterKey
+
+	.db	$FF
+	.db	00h
+	.dw	EnterKey
+
+	; [02] Plus
+	.db	$02
+	.db	00h
+	.dw	_FPADD
+	
+	; [03] Minus
+	.db	$02
+	.db	00h
+	.dw	_FPSUB
+
+	; [04] Mult
+	.db	$02
+	.db	00h
+	.dw	_FPMULT
+
+	; [05] Div
+	.db	$02
+	.db	00h
+	.dw	_FPDIV
+	
+	; [06] Sin
+	.db	$01
+	.db	03h
+	.dw	_SIN
+	
+	; [07] Sin^-1
+	.db	$01
+	.db	04h
+	.dw	_ASIN
+	
+	; [08] Cos
+	.db	$01
+	.db	03h
+	.dw	_COS
+	
+	; [09] Cos^-1
+	.db	$01
+	.db	04h
+	.dw	_ACOS
+	
+	; [0A] Tan
+	.db	$01
+	.db	03h
+	.dw	_TAN
+	
+	; [0B] Tan^-1
+	.db	$01
+	.db	04h
+	.dw	_ATAN
+	
+	; [0C] LOG
+	.db	$01
+	.db	03h
+	.dw	_LOGX
+	
+	; [0D] 10^x
+	.db	$01
+	.db	01h
+	.dw	_TENX
+	
+	; [0E] LN
+	.db	$01
+	.db	02h
+	.dw	_LNX
+	
+	; [0F] E^X
+	.db	$01
+	.db	01h
+	.dw	_ETOX
+	
+	; [10] x^2
+	.db	$01
+	.db	00h
+	.dw	_FPSQUARE
+	
+	; [11] Sqrt(x)
+	.db	$01
+	.db	00h
+	.dw	_SQROOT
+
+	; [12] 1/x
+	.db	$01
+	.db	00h
+	.dw	_FPRECIP
+
+	; [13] Y^X
+	.db	$02
+	.db	00h
+	.dw	_YTOX
+
+	; [14] Swap X,Y
+	.db	$FF
+	.db	00h
+	.dw	SwapXAndY
+	
+	; [15] Rotate Down
+	.db	$FF
+	.db	00h
+	.dw	RotateStackDown
+	
+	; [16] F1 a F5
+	.db	$FF
+	.db	00h
+	.dw	MenuParsing
+	
+	; [17] Math->Num->Int
+	.db	$01
+	.db	$03
+	.dw	_IntGR
+	
+	; [18] Math->Num->Abs
+	.db	$01
+	.db	$03
+	.dw	_ABSO1O2CP
+	
+	; [19] Math->Num->Ipart
+	.db	$01
+	.db	$05
+	.dw	_IntGR
+	
+	; [1A] Math->Num->Fpart
+	.db	$01
+	.db	$05
+	.dw	_Frac
+
+	; [1B] Math->Num->Round
+	.db	$01
+	.db	$05
+	.dw	_RNDGUARD 
+	
+	; [1C] Math->Num->Max
+	.db	$04
+	.db	$03
+	.db	$13
+			.db	00h
+
+	; [1D] Math->Num->Min
+	.db	$04
+	.db	$03
+	.db	$14
+			.db	00h
+
+	; [1E] Math->Num->Mod
+	.db	$04
+	.db	$03
+	.db	$15
+			.db	00h
+	
+	; [1F] Math->Prob->nPr
+	.db	$04
+	.db	$02
+	.db	$80
+			.db	00h
+			
+	; [20] Math->Prob->nCr
+	.db	$04
+	.db	$02
+	.db	$81
+			.db	00h
+			
+	; [21] Math->Prob->randInt
+	.db	$02
+	.db	$07
+	.dw	_randInt
+	
+	; [22] Math->Prob->RandN
+	.db	$02
+	.db	$08
+	.dw	_randNRM
+	
+	; [23] Math->Prob->RandBin
+	.db	$02
+	.db	$07
+	.dw	_randBin				
+	
+	; [24] Math->Num->Sign
+	.db	$03
+	.db	$04
+	.db	$b6
+		.db	00h
+		
+	; [25] Math->Prob->!
+	.db	$03
+	.db	$00
+	.db	$46	
+		.db	00h
+		
+		
+	; [26] Math->Prob->Rand
+	.db	$00
+	.db	$03
+	.dw	_random
+	
+	; [27] Math->Angle->Degree
+	.db	$03
+	.db	$00
+	.db	$48
+			.db	$00
+	
+	; [28] Math->Angle->Radian
+	.db	$03
+	.db	$00
+	.db	$47
+			.db	00h
+			
+	; [29] Math->Hyp->SinH
+	.db	$01
+	.db	$04
+	.dw	_SINH
+	
+	; [2A] Math->Hyp->CosH
+	.db	$01
+	.db	$04
+	.dw	_COSH
+	
+	; [2B] Math->Hyp->TanH
+	.db	$01
+	.db	$04
+	.dw	_TANH
+	
+	; [2C] Math->Hyp->SinH^-1
+	.db	$01
+	.db	$05
+	.dw	_ASinH
+	
+	; [2D] Math->Hyp->CosH^-1
+	.db	$01
+	.db	$05
+	.dw	_ACosH
+	
+	; [2E] Math->Hyp->TanH^-1
+	.db	$01
+	.db	$05
+	.dw	_ATanH
+	
+	; [2F] Math->Misc->Lcm
+	.db	$04
+	.db	$03
+	.db	$1E
+			.db	00h
+	
+	; [30] Math->Misc->Gcd
+	.db	$04
+	.db	$03	
+	.db	$1F
+			.db	00h
+			
+	; [31] Math->Misc->%
+	.db	$03
+	.db	$00
+	.db	$45
+			.db	00h
+			
+	; [32] Math->Misc->XSqrtY
+	.db	$04
+	.db	$01
+	.db	$F1
+			.db	00h
+			
+	; [33] Exit In TempALGMode
+	.db	$FF
+	.db	00h
+	.dw	ExitToEOSMode
+			
+	; [34] Clear Stack rpn command
+	.db	$FF
+	.db	00h
+	.dw	ClearStack
+
+	; [35] Accept but make the next key also Accepted
+	;  .db	$FF
+	;  .db	00h
+	;  .dw	AcceptAndNextAccept
+
+	; [36] And
+	.db	$04
+	.db	$02
+	.db	$40
+		.db	$FF
+		
+	; [37] Or
+	.db	$04
+	.db	$01
+	.db	$30
+		.db	$FF
+		
+	; [38] Xor
+	.db	$04
+	.db	$02
+	.db	$31
+		.db	$FF
+	
+	; [39] Not
+	.db	$03
+	.db	$03
+	.db	$CC
+		.db	$FF
+		
+	; [3A] RotR
+	.db	$03
+	.db	$04
+	.db	$CD
+		.db	$FF
+		
+	; [3B] RotL
+	.db	$03
+	.db	$04
+	.db	$CE
+		.db	$FF
+		
+	; [3C] ShiftR
+	.db	$03
+	.db	$05
+	.db	$CF
+		.db	$FF		
+			
+	; [3D] ShiftL
+	.db	$03
+	.db	$05
+	.db	$D0
+		.db	$FF
+.end

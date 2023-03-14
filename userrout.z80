@@ -1,0 +1,91 @@
+EnterKey:
+    call   _isEditEmpty
+    jp  z,DuplicateXToY
+
+    call ParseEntryAndPushStack
+
+DuplicateXToY:
+    call RPNStackPush
+
+    ld	hl,RpNStackX
+	ld	de,RpNStackY
+	ld	bc,11
+	ldir
+
+    ret
+
+SwapXAndY
+    ld  hl,RPNStackY
+	ld  de,RPNStackHelper
+	ld  bc,11
+	ldir
+
+	ld  hl,RPNStackX
+	ld  de,RPNStackY
+	ld  bc,11
+	ldir
+	
+	ld  hl,RPNStackHelper
+	ld  de,RPNStackX
+	ld  bc,11
+	ldir
+
+    jp CopyStackToTIOSVar
+
+RotateStackDown:
+	ld  hl,RPNStackX
+	ld  de,RPNStackHelper
+	ld  bc,11
+	ldir
+
+	call RPNStackPop
+
+	ld  hl,RPNStackHelper
+	ld  de,RPNStackR
+	ld  bc,11
+	ldir
+
+	ld  hl,RPNEmptyStack
+	ld  de,RPNStackHelper
+	ld  bc,11
+	ldir
+
+	ret
+
+ClearStack:
+	call RPNStackPop
+	call RPNStackPop
+	call RPNStackPop
+	call RPNStackPop
+	call RPNStackPop
+
+	ret
+
+ExitToEOSMode:
+	;Store X to Ans
+	ld	hl,RPNStackX
+	ld	de,_op1
+	ld	bc,11
+	ldir
+	call  _StoAns
+
+	ld	de,(_currow)
+	push  de
+
+    ;Display EOS Message
+	ld  hl,EOSModeMessage
+	ld  de,0000h
+	ld  (_currow),de
+	call  _puts
+	pop  de
+	ld  (_currow),de
+
+
+    ld  hl,StatusByte
+    ld  (hl),$FF
+    call  CopyStackToTIOSVar  ;Copy the stack to the TIOS var
+    jp EOSMode
+
+EOSModeMessage:
+	.db	"--TIRPN-86 EOS Mode--"
+	.db	"2nd[Exit] -> TIRPN-86",0

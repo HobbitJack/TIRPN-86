@@ -1,0 +1,384 @@
+.nolist
+#define equ .equ
+#include "asm86.h"
+#include "asm86.inc"
+.list
+
+.org _asm_exec_ram
+Install:
+	;Copy hook to HOME SQRTProgram
+
+	bit  4,(iy+$24)  ;Check HOME SQRTProgram flag
+	jp  nz,Uninstall  ;Skip to uninstall if hook already installed
+
+	;Clear any existing HOME SQRTProgram
+	ld  hl,HookName-1  ;Set SQRTProgram name to HOME; trash byte for type
+	call  _MOV10TOOP1  ;Copy name to OP1 for FindSym
+	call  _FINDSYM
+	call  nc,_delvar  ;Delete variable if it exists
+
+	ld  hl,HookStart
+	call  _SET_ABS_SRC_ADDR  ;Set copy source address to start of program
+
+	ld  hl,(HookSize)
+	call  _CREATEPROG  ;Have TI-OS create the destination, with HL as the size to allocate
+	call  _ex_ahl_bde  ;Copy B;DE -> A;HL
+	
+	call  _AHL_Plus_2_pg3	;Add 2 to AHL; skip type, size bytes; gives last byte of data
+	
+	call  _SET_ABS_DEST_ADDR  ;Set copy to location to TI-OS variable
+	
+	ld  hl,(HookSize)
+	call  _SET_MM_NUM_BYTES  ;Number of bytes to copy
+
+	ld  hl,(HookSize)
+	call  _mm_lDIR
+	call  _flushAllMenus
+
+
+	;Create Stack Variable
+	ld	hl,StackName-1
+	call	_MOV10TOOP1
+	ld	hl,57  ;[Status Byte] + [Counter] + [Stack]
+	call  _CREATEPROG
+
+	call _ex_ahl_bde
+	call _AHL_PLUS_2_PG3
+
+	ld  b,57
+	ld  de,$00
+StackInitLoop:
+	call _SET_WORD_AHL
+	djnz StackInitLoop
+
+    ;Display Install Screen
+    call  _clrLCD
+    ld  hl,WelcomeScreen
+    call  _homeup
+    call  _puts
+    call  _getkey
+
+	;Clear screen
+    call  _clrScrn     
+	call  _homeup
+
+	ld	hl,0004h
+	ld	(_curRow),hl
+
+	call DisplayStack
+
+	set  4,(iy+$24)  ;Activate HOME SQRTProgram
+    jp HookStart
+
+Uninstall:	
+	ld  hl,HookName-1
+	rst  20h
+	rst  10h
+	call  nc,_delvar
+	
+	ld  a,0
+	ld  (_winTop),a
+
+	res  4,(iy+$24)
+	call  _flushAllMenus
+	call  _clrScrn
+
+	call  _homeUp
+	ld  hl,UninstallScreen
+	call  _puts
+	ret
+
+;StartInstalledProgram -- HookStart
+HookStart:
+	;First byte of program
+	ld  a,5  ;Need room for stack to print; set entry line 6 lines down (still leaves 3 lines to work with)
+	ld  (_winTop),a
+	
+	call  CopyTIOSVarToStack
+
+HookCheck:
+    ;See if we are in EOS Mode
+    ld a,(StatusByte)
+    cp $FF
+    jp z,EOSMode
+
+    ;See if we've pressed Catalogue
+	ld  a,(_kbdKey)
+	cp  $75
+	jp  z,ExitToEOSMode
+	
+	;See if we've pressed 2nd[Exit]
+	ld  a,(_kbdKey)
+	cp  $76
+	jp  z,ExitToEOSMode
+
+    ;See if we are in MCFP Mode
+    ld  a,(MCFByte)
+    cp  $00
+    jp  nz,MCFP
+
+	jp  RPNParseInput
+
+MCFP:
+	;Multi-Character-Function Patch
+
+	;Exit to EOS under unknown(?) circumstances
+	ld	a,(_cxPrev)
+	cp	$96
+	jp	z,ExitToEOSMode
+	
+	ld  a,(MCFByte)  ;Check to see if we are loading an MCF
+	
+	;If we're done, go to parse
+	cp	$00  
+	jp	z,RPNParseInput
+	
+	;If we're not done, bump the command byte length down and exit
+	dec	a
+	ld	(MCFByte),a
+
+RPNParseInput:
+    ;Continue RPN after the RCL check; actually parse input
+	ld	hl,ParseTable  ;Store the parser table to reg HL
+	
+	;Set DE to the table index
+	ld	a,(_kbdKey)  ;Get entered keycode
+	ld	d,0
+	ld  e,a
+	
+	add	hl,de  ;Jump HL to the table index
+	ld	a,(hl)  ;Store lookup to reg A
+	cp	$FF  ;$FF in lookup table means NO-OP
+	ret z
+
+	dec a
+	call ActionParser
+
+	jp CopyStackToTIOSVar
+
+
+EOSMode:
+    ld	a,(_kbdKey)  ;Store last pressed key to reg A
+	cp	kQuit  ;Is that key 2nd[Exit]?
+	jp	z,ExitEOSMode  ;Quit to RPN
+	
+	;Otherwise ensure that we have the whole screen to work with
+	ld	a,0
+	ld	(_winTop),a
+    
+    ret
+
+ExitEOSMode:
+    ld  hl,StatusByte
+    ld  (hl),$00
+    call  CopyStackToTIOSVar  ;Copy the TIOS var back to the stack
+
+    ret
+
+
+;UTLITIY COMMANDS;  ALL RET
+CopyTIOSVarToStack:
+	;Copy TIOS Stack var to RPN Stack closed
+	
+	;Set A;HL to start of stack data
+	ld	a,0
+	ld	hl,StatusByte  ;Last byte of program -- included in copy data
+	
+	;Set copy from location to start of stack
+	call	_SET_ABS_SRC_ADDR
+	
+	;Find the TI-OS variable name in memory
+	ld	hl,StackName-1  ;Move Stack TI-OS variable name to HL, plus trash Type byte 
+	call  _Mov10TOOP1  ;Copy the 10 bytes to OP1
+	call  _FINDSYM  ;Find the stack variable in the VAT; store abs address to reg B;DE
+	
+	call  _ex_ahl_bde  ;Copy B;DE -> A;HL
+	
+	call	_AHL_Plus_2_pg3	; Add 2 to AHL; skip type, size bytes; gives last byte of data
+	
+	;Set copy from location to TI-OS Variable
+	call	_SET_ABS_SRC_ADDR
+	
+	ld	a,0
+	ld	hl,StatusByte  ;Which is at the end of this program
+	
+	call	_SET_ABS_DEST_ADDR
+	
+	;Set A;HL to number of bytes to copy; 57 for Status Byte, Wait Byte, and Stack Data (Back stack not copied)
+	ld	hl,57
+	ld	a,0
+	
+	call  _SET_MM_NUM_BYTES  ;Set copy bytes number to the correct amount
+	
+	call  _MM_LDIR  ;Copy to Stack Var
+
+	;Reset reg A and BC
+	ld	a,(_asm_reg_a)
+	ld	bc,(_asm_reg_bc)
+
+	ret
+
+CopyStackToTIOSVar:
+	;Copy Stack and other data to a TIOS var to store when TIRPN-86 is closed
+	
+	;Set A;HL to start of stack data
+	ld  a,0
+	ld  hl,StatusByte  ;Last byte of program -- included in copy data
+	
+	;Set copy from location to start of stack
+	call  _SET_ABS_SRC_ADDR
+	
+	;Find the TI-OS variable name in memory
+	ld	hl,StackName-1  ;Move Stack TI-OS variable name to HL
+	call  _Mov10TOOP1  ;Copy the 10 bytes to OP1
+	call  _FINDSYM  ;Find the stack variable in the VAT; store abs address to reg B;DE
+	
+	call  _ex_ahl_bde  ;Copy B;DE -> A;HL
+	
+	call  _AHL_Plus_2_pg3	;Add 2 to AHL; skip type, size bytes; gives last byte of data
+	
+	call  _SET_ABS_DEST_ADDR  ;Set copy to location to TI-OS variable
+	
+	;Set A;HL to number of bytes to copy; 57 for Status Byte, Wait Byte, and Stack Data (Back stack not copied)
+	ld  hl,57
+	ld  a,0
+	
+	call  _SET_MM_NUM_BYTES  ;Set copy bytes number to the correct amount
+	
+	call  _MM_LDIR  ;Copy to TI-OS Var
+
+	;Reset reg A and BC
+	ld  a,(_asm_reg_a)
+	ld  bc,(_asm_reg_bc)
+	
+	ret
+
+RPNStackPush:
+	ld  bc,11
+	ld  hl,RPNStackT
+	ld  de,RPNStackR
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNStackZ
+	ld  de,RPNStackT
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNStackY
+	ld  de,RPNStackZ
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNStackX
+	ld  de,RPNStackY
+	ldir
+
+	ret
+
+
+PopXToOP1:
+	ld  de,_OP1
+	ld  hl,RPNStackX
+	ld  bc,11
+	ldir
+
+	jr RPNStackPop
+
+
+PopXToOP2
+	ld  de,_OP2
+	ld  hl,RPNStackX
+	ld  bc,11
+	ldir
+
+	jr RPNStackPop
+
+
+RPNStackPop:
+	ld  bc,11
+	ld  hl,RPNStackY
+	ld  de,RPNStackX
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNStackZ
+	ld  de,RPNStackY
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNStackT
+	ld  de,RPNStackZ
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNStackR
+	ld  de,RPNStackT
+	ldir
+
+	ld  bc,11
+	ld  hl,RPNEmptyStack
+	ld  de,RPNStackR
+	ldir
+
+	ret
+
+SaveAndExitWithPrint:
+	call DisplayStack
+	jp SaveAndExit
+
+SaveAndExit:
+	call CopyStackToTIOSVar
+
+	;Reset Z flag
+	ld	a,1
+	cp	0
+
+	ret
+;Includes -- NEED TO MAKE IT INTO SECTION W/HOOK FOR SQRTPROGRAM
+#include "parser.z80"
+#include "disp.z80"
+#include "userrout.z80"
+#include "parsertable.z80"
+
+;VARIABLES
+StackName:
+	.db	$08,"%RPNStk"
+StatusByte:
+	.db $00  ; Status Byte: 0 == Normal Operation; 1 == TempAlgMode
+MCFByte
+	.db $00  ; Wait until the end of multi-letter commands
+RPNStackX:
+	.db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+RPNStackY:
+	.db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+RPNStackZ:
+	.db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+RPNStackT:
+	.db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+RPNStackR:
+	.db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+RPNStackHelper:  ;For when we need to push but can't waste R
+    .db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+RPNEmptyStack:  ;11 empty bytes for filling in R
+    .db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+;END INSTALLED PROGRAM -- RPNEmptyStack+11
+
+HookName:
+    .db $05,$10,"HOME"
+HookSize:
+	.dw RPNEmptyStack+11-HookStart
+WelcomeScreen:
+	.db	"   TIRPN-86   v1.0   "
+	.db	"----- INSTALLED -----"
+	.db	" [)] ==> Rotate Down "
+	.db	" [(] ==> Swap X,Y    "
+	.db	" [,] ==> Clear Stack "
+	.db	"---By---HobbitJack---"
+	.db	"    Press Any Key    ",0
+UninstallScreen:
+	.db	"   TIRPN-86   v1.0   "
+	.db	"---- UNINSTALLED ----",0
+DebugString1:
+	.db "   DEBUG  STRING 1   ",0
+.end

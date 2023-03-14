@@ -1,0 +1,73 @@
+; Display Routine
+; Rpn86
+DisplayStack:
+	;Store CurrentCursorRow
+	ld  de,(_curRow)
+	push  de
+	
+	;Display Stack template
+	ld  de,0
+	ld  (_curRow),de
+	ld  hl,ScreenTemplate
+	call  _puts
+	
+	;Display 
+	ld	hl,RpNStackX
+	ld	de,0204h
+	call	DispAndLoadOp1
+	
+	ld	hl,RpNStackY
+	ld	de,0203h
+	call	DispAndLoadOp1
+
+	ld	hl,RpNStackZ
+	ld	de,0202h
+	call	DispAndLoadOp1
+
+	ld	hl,RpNStackT
+	ld	de,0201h
+	call	DispAndLoadOp1
+	
+	ld	hl,RpNStackR
+	ld	de,0200h
+	call	DispAndLoadOp1
+
+	pop	de
+	ld	(_curRow),de
+	ret
+
+
+DispAndLoadOp1:
+	push	de
+	
+	ld	de,_op1
+	ld	bc,11
+	ldir
+	
+	pop	de
+DispOp1:
+	ld	(_curRow),de
+
+NormalNotation:
+	;????????? Approach with caution
+	ld	a,7
+	out	(5),a
+
+	ld	a,13
+	call	$4cc6
+	
+	ld	a,$d
+	out	(5),a
+		
+	ld	hl,_op3
+	call	_puts
+	
+	ret	
+	
+ScreenTemplate:
+	.db "R=                   "
+	.db	"T=                   "
+	.db	"Z=                   "
+	.db	"Y=                   "
+	.db	"X=                   ",0
+.end

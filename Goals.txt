@@ -1,0 +1,19 @@
+RPN program for TI-86
+ -- Based on RPN86 (support for existing features)
+
+5 Level Stack
+X,Y,Z,T,R
+
+) - Cycle Up
+X->Y->Z->T->R->X
+2nd [Quit] - Switch between RPN and EOS
+Enter on blank
+Push Stack; Y->X
+
+TODO
+ANS usable as "function" to push EOS ANS to stack; will be overwritten by TI math, but that's OK
+Allow for accessing X, Y, Z, T, and R from EOS (i.e. store those vars to those TI-OS vars)
+Increase availible functions (use entry as algebraic values for fnInt and deriv, X for A and Y for B?)?
+( - Cycle Down
+X->R->T->Z->Y->X
+] - Swap X and Y

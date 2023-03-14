@@ -1,0 +1,481 @@
+ActionParser:
+
+    ;Reset RPNStackHelper
+    ld  hl,RPNStackHelper
+    ld  de,RPNEmptyStack
+    ld  bc,11
+    ldir
+
+    ;reg A is lookup code
+    ;Set up reg DE
+    ld  e,a
+	ld  d,0
+
+    ;DE = 4 * DE; each Action Table item is 4 bytes
+    ld  hl,0  ;Using HL as a two-byte accumulator
+	add  hl,de
+	add  hl,de
+	add  hl,de
+
+    ;Store reg HL back to DE
+	ex  de,hl
+	
+    ;Jump HL to correct address in Action Table
+	ld  hl,ActionTable
+	add  hl,de		
+	
+	ld  a,(hl)  ;Store the action's Type byte of the action to A
+	inc  hl  ;Use HL for the other three bytes
+	
+    call ActionExecuter
+	
+	ret
+
+ActionExecuter:
+    inc  a
+    jp  z,JumpToAddress  ;Type == $FF; Jump to TIRPN-86 Command
+	dec  a
+    jp	z,NoArgRomCall  ;Type == $00; Use TI-OS command with no arguments (only used for Random right now)
+	dec  a
+    jp	z,OneArgRomCall  ;Type == $01; Use TI-OS command with one argument (SIN(X), for example)
+	dec  a
+    jp	z,TwoArgRomCall  ;Type == $02; Use TI-OS command with two arguments (X+Y, for example)
+	dec  a
+    jp	z,UnOpExec  ;Type == $03; Use TI-OS command called with _UnOpExec
+	dec  a
+    jp	z,BinOpExec  ;Type == $04; Use TI-OS command called with _BinOpExec
+
+JumpToAddress:
+    ;Execute an TIRPN-86 Command
+    inc  hl  ;Skip MCF Count byte
+    ld  d,(hl) ;Store first byte of 16-bit address to D 
+    inc  hl
+    ld  e,(hl) ;Store second byte of 16-bit address to E
+    ex  de,hl  ;Store DE to HL b/c can only jump to HL, not to DE
+    jp  (hl)
+
+NoArgRomCall:
+    ld  a,(hl) ;Store MCF Count byte to A
+    ld  (MCFByte),a
+
+    ;Store ROM call address to HL
+    inc  hl  ;Move to first address byte
+    ld  d,(hl) ;Store first byte of 16-bit address to D 
+    inc  hl
+    ld  e,(hl) ;Store second byte of 16-bit address to E
+
+    ;Check if there is an entry to use as X arg (there is none for these)
+    call  _IsEditEmpty
+    call  nz,ParseEntryAndPushStack
+
+    ;Set up error handler, in case of an error from arguments (say, an invalid angle for arcsin)
+    ld  hl,ParseError
+    call  _pushErrorHandler
+    ex  de,hl  ;Restore reg HL
+
+    ;Push the address of the call after the ROM Call to stack for return
+    ld	de,$+5
+	push  de
+
+	jp	(hl)  ;Make ROM Call, we can't call, b/c we can only call pre-known addresses
+    ;OP1 now stores the answer; from here it's actually storing it all
+
+	call _popErrorHandler
+
+    call  _CKOP1CPLX
+	jp  z,ComplexError
+
+    call PushOP1ToStack
+
+    jp SaveAndExitWithPrint
+
+OneArgRomCall:
+    ld  a,(hl) ;Store MCF Count byte to A
+    ld  (MCFByte),a
+
+    ;Store ROM call address to HL
+    inc  hl  ;Move to first address byte
+    ld  d,(hl) ;Store first byte of 16-bit address to D 
+    inc  hl
+    ld  e,(hl) ;Store second byte of 16-bit address to E
+
+    push de
+
+    ;Check if there is an entry to use as X arg (there is none for these)
+    call  _IsEditEmpty
+    call  nz,ParseEntryAndPushStack
+
+    ;Pop arguments from stack
+    call PopXToOP1  ;Pop OP1 to DE
+
+    ;Reset R
+    ld  de,RPNStackR
+    ld  hl,RPNStackHelper
+    ld  bc,11
+    ldir
+
+    ;Set up error handler, in case of an error from arguments (say, an invalid angle for arcsin)
+    ld  hl,ParseError
+    call  _pushErrorHandler
+    ex  de,hl  ;Restore ROM jump address to HL
+
+    ;Push the address of the call after the ROM Call to stack for return
+    ld	hl,$+5
+	push  de
+
+	jp	(hl)  ;Make ROM Call, we can't call, b/c we can only call pre-known addresses
+    ;OP1 now stores the answer; from here it's actually storing it all
+
+	call _popErrorHandler
+
+    call  _CKOP1CPLX
+	jp  z,ComplexError
+
+    call PushOP1ToStack
+
+    jp SaveAndExitWithPrint
+
+
+TwoArgRomCall:
+    ld  a,(hl) ;Store MCF Count byte to A
+    ld  (MCFByte),a
+
+    ;Store ROM call address to HL
+    inc  hl  ;Move to first address byte
+    ld  d,(hl) ;Store first byte of 16-bit address to D 
+    inc  hl
+    ld  e,(hl) ;Store second byte of 16-bit address to E
+
+    push de
+
+    ;Check if there is an entry to use as X arg (there is none for these)
+    call  _IsEditEmpty
+    call  nz,ParseEntryAndPushStack
+
+    ;Pop arguments from stack; note that it is F(2,1), so 2^1 rather than 1^2
+    call PopXToOP1  ;Pop X to OP1, AKA the first arg
+    call PopXToOP2  ;Pop X to OP2, AKA the second arg
+
+    ;Reset R
+    call RPNStackPop
+    ld  de,RPNStackR
+    ld  hl,RPNStackHelper
+    ld  bc,11
+    ldir
+
+    ;Set up error handler, in case of an error from arguments (say, an invalid angle for arcsin)
+    ld  hl,ParseError
+    call  _pushErrorHandler
+    ex  de,hl  ;Restore ROM jump address to HL
+
+    ;Push the address of the call after the ROM Call to stack for return
+    ld	hl,$+5
+	push  de
+
+	jp	(hl)  ;Make ROM Call, we can't call, b/c we can only call pre-known addresses
+    ;OP1 now stores the answer; from here it's actually storing it all
+
+	call _popErrorHandler
+
+    call  _CKOP1CPLX
+	jp  z,ComplexError
+
+    call PushOP1ToStack
+
+    jp SaveAndExitWithPrint
+
+UnOpExec:
+    ;Some operations are not executed by ROM calls, but rather by _UNOPEXEC
+    ld  a,(hl) ;Store MCF Count byte to A
+    ld  (MCFByte),a
+
+    ;Get operation
+    inc	hl  ;Go past the MCF Count byte
+	ld  a,(hl)
+	push  af
+
+    push de
+
+    ;Check if there is an entry to use as X arg (there is none for these)
+    call  _IsEditEmpty
+    call  nz,ParseEntryAndPushStack
+
+    ;Set up error handler, in case of an error from arguments (say, an invalid angle for arcsin)
+    ld  hl,ParseError
+    call  _pushErrorHandler
+    ex  de,hl  ;Restore ROM jump address to HL
+
+    ;Pop arguments from stack
+    call PopXToOP1  ;Pop X to OP1, AKA the first arg
+
+    ;Reset R
+    call RPNStackPop
+    ld  de,RPNStackR
+    ld  hl,RPNStackHelper
+    ld  bc,11
+    ldir
+
+	call  _UnOpExec  ;Make ROM Call, done with this operaiton
+    ;OP1 now stores the answer; from here it's actually storing it all
+
+	call _popErrorHandler
+
+    call  _CKOP1CPLX
+	jp  z,ComplexError
+
+    call PushOP1ToStack
+
+    jp SaveAndExitWithPrint
+
+
+BinOpExec:
+    ;Some operations are not executed by ROM calls, but rather by _UNOPEXEC
+    ld  a,(hl) ;Store MCF Count byte to A
+    ld  (MCFByte),a
+
+    ;Get operation
+    inc	hl  ;Go past the MCF Count byte
+	ld  a,(hl)
+	push  af
+
+    push de
+
+    ;Check if there is an entry to use as X arg (there is none for these)
+    call  _IsEditEmpty
+    call  nz,ParseEntryAndPushStack
+
+    ;Set up error handler, in case of an error from arguments (say, an invalid angle for arcsin)
+    ld  hl,ParseError
+    call  _pushErrorHandler
+    ex  de,hl  ;Restore ROM jump address to HL
+
+    ;Pop arguments from stack; note that it is F(2,1), so 2^1 rather than 1^2
+    call PopXToOP1  ;Pop X to OP1, AKA the first arg
+    call PopXToOP2  ;Pop X to OP2, AKA the second arg
+
+    ;Reset R
+    call RPNStackPop
+    ld  de,RPNStackR
+    ld  hl,RPNStackHelper
+    ld  bc,11
+    ldir
+
+	call  _UnOpExec  ;Make ROM Call, done with this operaiton
+    ;OP1 now stores the answer; from here it's actually storing it all
+
+	call _popErrorHandler
+
+    call  _CKOP1CPLX
+	jp  z,ComplexError
+
+    call PushOP1ToStack
+
+    jp SaveAndExitWithPrint
+
+
+ParseError:
+	;Clean everything up after error
+    call  _flushallmenus
+	call  _runindicoff
+	call  _CloseEditBufNoR
+	call  FinishOpenOfBuffer
+	
+    ;Display error message
+	ld  de,0004h
+	ld  (_curRow),de
+	ld  hl,ParseErrorMessage
+	call  _puts	
+	call  _getkey  ;Wait for input
+
+	call  _clrWindow
+	jp	SaveAndExit
+
+ComplexError:
+    ;Clean everything up after error
+    call  _flushallmenus
+	call  _runindicoff
+	call  _CloseEditBufNoR
+	call  FinishOpenOfBuffer
+	
+    ;Display error message
+	ld  de,0004h
+	ld  (_curRow),de
+	ld  hl,ComplexErrorMessage
+	call  _puts	
+	call  _getkey  ;Wait for input
+
+	call  _clrWindow
+	jp	SaveAndExit
+
+PushOP1ToStackNoOverwrite:
+    ;Copy R to Helper
+    ld  de,RPNStackHelper
+    ld  hl,RPNStackR
+    ld  bc,11
+    ldir
+
+PushOP1ToStack:  
+    call RPNStackPush
+
+    ld	hl,_op1
+	ld	de,RpNStackX
+	ld	bc,11
+	ldir
+
+    ret
+
+
+ParseEntryAndPushStack:
+    call  _closeEditBufNoR  ;Close the Entry buffer
+	
+	ld  hl,EditName
+	call _Mov10TOOP1
+
+    ;Parse the number!
+	ld  hl,ParseError
+	call  _pushErrorHandler
+	call  _PARSEINP  ;Parse Edit
+	call  _popErrorHandler
+
+
+	;Push Entry to Stack
+	call  PushOP1ToStackNoOverwrite
+
+
+FinishOpenOfBuffer:
+    ;We need to re-open the edit buffer so we can type again
+
+    ;Clear the Edit TI-OS var if it exist
+	ld  hl,EditName
+	call  _MOV10TOOP1
+	call  _FINDSYM
+	call  c,_delvar  ;Delete if exists
+
+
+	ld  hl,EditName
+	call  _MOV10TOOP1
+	
+    ;Re-create Edit var based on OP1
+	ld  hl,0
+	call  _CREATEPROG
+
+    ;Find the var
+	ld  hl,EditName
+	call  _MOV10TOOP1
+	call  _FINDSYM
+		
+	call  _setEmptyEditPtr  ;Use var to re-set the Edit Pointer
+	
+	call  _bufClear  ;Clear buffer
+	
+    ;???? Very Important
+	call	_clrWindow	 
+	set     5,(iy+$0c)
+	res     3,(iy+$01)
+	call	_ram_page_1
+
+	ret
+
+
+MenuParsing:
+	;User has used an F key, what to do?
+
+    ;Is a menu open
+    ld	a,(_menuSysDepth)
+	or	a
+    jp	z,CopyStackToTIOSVar  ;No, pretend it never happened
+
+	ld	hl,MenuTable-4
+MenuLoopFind:
+	ld	de,0004h
+	add	 hl,de
+		
+	push  hl
+	ld	a,(hl)
+    inc  hl
+    ld  h,(hl)
+    ld  l,a
+	ld	de,$FFFF
+	call  cp_HL_DE		
+    jp  nz,$+7
+	pop  hl
+	jp  ExitToEOSMode
+	
+	push	hl			
+	call	GetCurrentMenuAdressPtr
+	ld	a,(hl)
+    inc  hl
+    ld  h,(hl)
+    ld  l,a
+	
+	pop	de
+	call	cp_HL_DE
+
+	pop	hl
+	jp	nz,MenuLoopFind
+	
+	inc	hl
+	inc	hl
+	call	$33
+	;	hl	== ptr a la table
+
+	push	hl
+
+	;	a == menu offset
+	ld	a,(_kbdKey)
+	sub	kF1
+
+	ld	b,a
+		
+	call	GetCurrentMenuAdressPtr
+	inc	hl
+	inc	hl		; Now That point to the Next page menu byte
+	ld	a,(hl)
+
+	add	a,b
+	
+	pop	hl
+	
+	ld	e,a
+	ld	d,0
+	
+	add	hl,de
+	
+	ld	a,(hl)
+	
+	cp  $FF
+    jp  z,CopyStackToTIOSVar
+    or  a
+    jp  z,CopyStackToTIOSVar
+	
+	jp	ActionParser	
+
+	
+GetCurrentMenuAdressPtr:
+	; Output : hl=*Adresse du menu Courant
+
+	ld	hl,_menuSysStack
+	
+	ex	de,hl
+	
+	ld	a,(_menuSysDepth)
+	dec	a
+	ld	l,a
+	ld	h,0
+	add	hl,hl
+	add	hl,hl
+	add	hl,de
+	
+	ret
+
+
+ParseErrorMessage:
+    .db	"Unable to Parse Input"
+	.db	"----Press any key----",0
+
+ComplexErrorMessage:
+    .db	"Complex # Unsupported"
+	.db	"----Press any key----",0
+
+EditName:
+	.db	05h,01h,"!"
