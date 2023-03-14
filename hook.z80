@@ -1,6 +1,5 @@
 .nolist
 #define equ .equ
-#include "asm86.h"
 #include "asm86.inc"
 .list
 
