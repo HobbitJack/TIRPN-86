@@ -396,7 +396,7 @@ MenuLoopFind:
     ld  h,(hl)
     ld  l,a
 	ld	de,$FFFF
-	call  cp_HL_DE		
+	call  _cphlde
     jp  nz,$+7
 	pop  hl
 	jp  ExitToEOSMode
@@ -409,7 +409,7 @@ MenuLoopFind:
     ld  l,a
 	
 	pop	de
-	call	cp_HL_DE
+	call  _cphlde
 
 	pop	hl
 	jp	nz,MenuLoopFind

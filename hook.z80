@@ -70,19 +70,25 @@ StackInitLoop:
 	set  4,(iy+$24)  ;Activate HOME SQRTProgram
     jp HookStart
 
-Uninstall:	
+Uninstall:
+	;Uninstall program, but keep stack data
+
+	;Delete SQRTProgram
 	ld  hl,HookName-1
-	rst  20h
-	rst  10h
+	call  _MOV10TOOP1  ;Copy name to OP1 for FindSym
+	call  _FINDSYM
 	call  nc,_delvar
 	
+	;Reset window to top
 	ld  a,0
 	ld  (_winTop),a
 
+	;Unset HOME SQRTProgram flag
 	res  4,(iy+$24)
 	call  _flushAllMenus
 	call  _clrScrn
 
+	;Show uninstall screen
 	call  _homeUp
 	ld  hl,UninstallScreen
 	call  _puts
@@ -149,7 +155,7 @@ RPNParseInput:
 	add	hl,de  ;Jump HL to the table index
 	ld	a,(hl)  ;Store lookup to reg A
 	cp	$FF  ;$FF in lookup table means NO-OP
-	ret z
+	ret z  ;Return if NO-OP
 
 	dec a
 	call ActionParser
