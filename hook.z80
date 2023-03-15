@@ -9,7 +9,7 @@ Install:
 
 	bit  4,(iy+$24)  ;Check HOME SQRTProgram flag
 	jp  nz,Uninstall  ;Skip to uninstall if hook already installed
-
+	
 	;Clear any existing HOME SQRTProgram
 	ld  hl,HookName-1  ;Set SQRTProgram name to HOME; trash byte for type
 	call  _MOV10TOOP1  ;Copy name to OP1 for FindSym
@@ -67,7 +67,8 @@ StackInitLoop:
 	call DisplayStack
 
 	set  4,(iy+$24)  ;Activate HOME SQRTProgram
-    jp HookStart
+
+	ret
 
 Uninstall:
 	;Uninstall program, but keep stack data
@@ -95,11 +96,16 @@ Uninstall:
 
 ;StartInstalledProgram -- HookStart
 HookStart:
+	ld  hl,DebugString1
+	call _puts
 	;First byte of program
 	ld  a,5  ;Need room for stack to print; set entry line 6 lines down (still leaves 3 lines to work with)
 	ld  (_winTop),a
 	
 	call  CopyTIOSVarToStack
+
+	ld  hl,DebugString2
+	call _puts
 
 HookCheck:
     ;See if we are in EOS Mode
@@ -347,6 +353,10 @@ SaveAndExit:
 #include "parsertable.z80"
 
 ;VARIABLES
+DebugString1:
+	.db "   DEBUG  STRING 1   ",0
+DebugString2:
+	.db "   DEBUG  STRING 2   ",0
 StackName:
 	.db	$08,"%RPNStk"
 StatusByte:
@@ -384,6 +394,4 @@ WelcomeScreen:
 UninstallScreen:
 	.db	"   TIRPN-86   v1.0   "
 	.db	"---- UNINSTALLED ----",0
-DebugString1:
-	.db "   DEBUG  STRING 1   ",0
 .end
