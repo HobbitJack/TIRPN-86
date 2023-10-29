@@ -94,6 +94,7 @@ Uninstall:
 	call  _puts
 	ret
 
+.org _asm_exec_ram
 ;StartInstalledProgram -- HookStart
 HookStart:
 	ld  hl,DebugString1
